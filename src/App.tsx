@@ -3,7 +3,7 @@ import { Upload, FileText, AlertCircle, Loader2, Download } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import axios, { AxiosError } from 'axios';
 import toast, { Toaster } from 'react-hot-toast';
-import { cn } from './lib/utils';
+import clsx from 'clsx'; // Changed from './lib/utils'
 import * as XLSX from 'xlsx';
 
 interface ExtractedData {
@@ -137,7 +137,7 @@ function App() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div
                 {...getRootProps()}
-                className={cn(
+                className={clsx(
                   "border-2 border-dashed border-gray-300 rounded-lg p-8 text-center transition-colors duration-200",
                   isDragActive && "border-blue-500 bg-blue-50",
                   "hover:border-blue-400 hover:bg-blue-50/50"
@@ -146,7 +146,7 @@ function App() {
                 <input {...getInputProps()} />
                 <div className="cursor-pointer flex flex-col items-center">
                   <Upload
-                    className={cn(
+                    className={clsx(
                       "h-12 w-12 mb-4 transition-colors duration-200",
                       isDragActive ? "text-blue-500" : "text-gray-400"
                     )}
@@ -168,7 +168,7 @@ function App() {
               <button
                 type="submit"
                 disabled={!file || loading || serverStatus === 'offline'}
-                className={cn(
+                className={clsx(
                   "w-full py-3 px-4 rounded-lg text-white font-medium flex items-center justify-center gap-2 transition-colors duration-200",
                   !file || loading || serverStatus === 'offline'
                     ? "bg-gray-400 cursor-not-allowed"
@@ -215,7 +215,7 @@ function App() {
                       {data.voter_surname && (
                         <p className="text-gray-600">उपनाम: {data.voter_surname}</p>
                       )}
-                      {data.surname && ( // Added display for surname
+                      {data.surname && (
                         <p className="text-gray-600">उपनाम: {data.surname}</p>
                       )}
                       {data.section_number && data.section_name && (

@@ -1,28 +1,15 @@
-from fastapi import FastAPI, UploadFile, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+# ocr_utils.py
 import pdf2image
 import pytesseract
 import cv2
 import numpy as np
+import logging
+import gc
+import re
 from pathlib import Path
 import tempfile
 import os
-import re
 import time
-import logging
-import gc
-
-app = FastAPI()
-
-# Configure CORS to allow the frontend origin
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 # Configure Tesseract with the correct Windows path
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+class PDFProcessingError(Exception):
+    """Custom exception for PDF processing errors."""
+    pass
 
 def preprocess_image(image):
     """Preprocess the image for better OCR results."""
@@ -64,14 +55,12 @@ def extract_text_from_pdf(pdf_path: str):
                         record = {}
                     continue
                 
-                # Extract section number and name
                 section_match = re.search(r'अनुभाग संख्या एवं नाम\s*:\s*(\d+-\w+[\w\s]+)', ocr_text, re.MULTILINE)
                 if section_match and 'section_number' not in record:
                     section = section_match.group(1).strip()
                     record['section_number'] = section.split('-')[0].strip()
                     record['section_name'] = '-'.join(section.split('-')[1:]).strip()
 
-                # Extract polling station number and name
                 polling_match = re.search(r'निवाचन क्षेत्र की संख्या एवं नाम\s*:\s*(\d+\s*-\s*[\w\s()]+)', ocr_text, re.MULTILINE)
                 if polling_match and 'polling_station_number' not in record:
                     polling = polling_match.group(1).strip()
@@ -81,7 +70,6 @@ def extract_text_from_pdf(pdf_path: str):
                 name_match = re.search(r'निर्वाचक का नाम\s*:\s*([^\n]+)', line)
                 if name_match:
                     full_name = name_match.group(1).strip()
-                    # Assuming surname is the last word (simple split, can be refined)
                     name_parts = full_name.split()
                     record['name'] = full_name
                     record['surname'] = name_parts[-1] if name_parts else ''
@@ -118,7 +106,7 @@ def extract_text_from_pdf(pdf_path: str):
                 logger.warning(f"No match found on page {page_num} with OCR text: {ocr_text}")
     except Exception as e:
         logger.error(f"Error processing PDF: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+        raise PDFProcessingError(f"Error processing PDF: {str(e)}")
     finally:
         for image in images:
             if hasattr(image, 'close'):
@@ -127,65 +115,6 @@ def extract_text_from_pdf(pdf_path: str):
     
     return extracted_data
 
-@app.post("/api/extract")
-async def extract_data(file: UploadFile):
-    if not file.filename.endswith('.pdf'):
-        return JSONResponse(
-            status_code=400,
-            content={"detail": "Only PDF files are allowed"}
-        )
-    
-    temp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-            content = await file.read()
-            temp_file.write(content)
-            temp_path = temp_file.name
-
-        extracted_data = extract_text_from_pdf(temp_path)
-        
-        if not extracted_data:
-            return JSONResponse(
-                status_code=422,
-                content={"detail": "No data could be extracted from the PDF"}
-            )
-        
-        return JSONResponse(content=extracted_data)
-    
-    except Exception as e:
-        logger.error(f"Error in extract_data: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"detail": f"An error occurred: {str(e)}"}
-        )
-    
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            max_attempts = 5
-            for attempt in range(max_attempts):
-                try:
-                    time.sleep(1 + attempt * 0.5)
-                    os.unlink(temp_path)
-                    logger.info(f"Deleted temp file: {temp_path} after {attempt + 1} attempt(s)")
-                    break
-                except PermissionError as e:
-                    logger.warning(f"Attempt {attempt + 1}/{max_attempts} failed to delete {temp_path}: {str(e)}")
-                    if attempt == max_attempts - 1:
-                        logger.error(f"Failed to delete temp file after {max_attempts} attempts: {str(e)}")
-                except Exception as e:
-                    logger.error(f"Unexpected error deleting {temp_path}: {str(e)}")
-                    break
-
-@app.get("/health")
-async def health_check():
-    logger.info("Health check endpoint called")
-    return {"status": "healthy"}
-
-@app.get("/test-cors")
-async def test_cors():
-    logger.info("Testing CORS endpoint")
-    return {"message": "CORS test successful"}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+def process_pdf(pdf_path: str):
+    """Wrapper function to process PDF and return extracted data."""
+    return extract_text_from_pdf(pdf_path)
